@@ -4,7 +4,7 @@ def encode_multiple_server_reply(servers):
     
     Args:
         servers (list of tuples): A list of servers, where each server is a tuple (IP, port).
-                                  Example: [("1.1.1.1", 27015), ("192.168.0.1", 27016)]
+                                  Example: [("192.168.0.0", 27015), ("192.168.0.1", 27016)]
     
     Returns:
         bytes: Encoded packet with all servers.
@@ -32,12 +32,3 @@ def encode_multiple_server_reply(servers):
     except Exception as e:
         print(f"Error while encoding servers: {e}")
         return b""
-
-# servers = [
-#     ("1.3.4.5", 27015),  # Server 1
-#     ("192.168.0.1", 27016),   # Server 2
-#     ("127.0.0.1", 27017)      # Server 3
-# ]
-
-# encoded_packet = encode_multiple_server_reply(servers)
-# print(f"Encoded packet: {encoded_packet}")

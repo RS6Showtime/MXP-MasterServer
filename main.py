@@ -1,7 +1,7 @@
 import socket
 import configparser
 import colorama
-from colorama import Fore
+from colorama import Fore, Style
 from tools import encoder
 import sys
 import signal
@@ -12,18 +12,14 @@ import time
 colorama.init(True)
 
 global_socket = None
-global_thread = None
-stop_event = threading.Event()
 
 def signal_handler(sig, frame):
-    global global_socket, stop_event
+    global global_socket
 
     if global_socket:
         global_socket.close()
 
-    stop_event.set()
-
-    print(f'{Fore.RED}[*]{Fore.GREEN} MasterServer Stopped...')
+    print(f'\n{Fore.RED}[*]{Fore.GREEN} MasterServer Stopped...')
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -89,11 +85,10 @@ def load_list_and_prepare_data():
     print(f"{Fore.RED}[*]{Fore.GREEN} MasterServer Loaded{Fore.CYAN} {str(len(vip_servers))}{Fore.GREEN} VIP Servers")
     print(f"{Fore.RED}[*]{Fore.GREEN} MasterServer Loaded{Fore.CYAN} {str(len(normal_servers))}{Fore.GREEN} Normal Servers")
 
-def main():
-    global global_socket, global_thread
+def start_main_server():
+    global global_socket
 
     # Main
-    reload                    = int(config.get("Automations", "reload_interval"))
     delay_show_normal_servers = float(config.get("Automations", "delay_show_normal_servers"))
     hold_connexion_closed     = float(config.get("Automations", "hold_connexion_closed"))
     force_conexion_to_close   = float(config.get("Automations", "force_conexion_to_close"))
@@ -107,19 +102,7 @@ def main():
 
     global_socket = socky
 
-    # Set socket to non-blocking mode
-    socky.setblocking(0)
-
     load_list_and_prepare_data()
-
-    def f_reload_interval_for_master_list():
-        while not stop_event.is_set():
-            time.sleep(reload)
-            load_list_and_prepare_data()
-
-    thread = threading.Thread(target=f_reload_interval_for_master_list, daemon=True)
-    global_thread = thread
-    thread.start()
 
     print(f"{Fore.RED}[*]{Fore.GREEN} MasterServer Started...")
 
@@ -131,98 +114,124 @@ def main():
     intern_start_header = start_header
     intern_end_header   = end_header
 
-    while not stop_event.is_set():
-        # Use select to check if data is available
-        readable, _, _ = select.select([socky], [], [], 1)
+    while True:
+        try:
+            # Check for incoming messages
+            msg, client = socky.recvfrom(64)
+            ip = client[0]
 
-        if readable:
-            try:
-                # Check for incoming messages
-                msg, client = socky.recvfrom(64)
-                ip = client[0]
+            # Save current Time
+            new_current_time = time.time()
 
-                # Save current Time
-                new_current_time = time.time()
-                
-                # Check if it's the time to close the connexion with the client
-                # We can't really close, but we can force counter-strike 1.6 to stop sending us messages.
-                # Will send last header which is format with "\x00" * 6
-                # So we won't receive anything from him
-                if ip in client_delay_force_close_connexion:
-                    # Is it the time? Yep, it is :P
-                    if client_delay_force_close_connexion[ip] < new_current_time:
-                        socky.sendto(end_header, client)
-                        del client_delay_force_close_connexion[ip]
-                        print(f"{Fore.RED}[*]{Fore.GREEN} Clossed Connexion With Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Connected For To Much]")
-                        continue # Ignore Incomming Packets
+            # Check if it's the time to close the connexion with the client
+            # We can't really close, but we can force counter-strike 1.6 to stop sending us messages.
+            # Will send last header which is format with "\x00" * 6
+            # So we won't receive anything from him
+            if ip in client_delay_force_close_connexion:
+                # Is it the time? Yep, it is :P
+                if client_delay_force_close_connexion[ip] < new_current_time:
+                    socky.sendto(end_header, client)
+                    del client_delay_force_close_connexion[ip]
+                    print(f"{Fore.RED}[*]{Fore.GREEN} Clossed Connexion With Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Connected For To Much]")
+                    continue # Ignore Incomming Packets
 
-                # Delay Showing VIP + Normal Servers
-                if ip in client_delay_show_normal_servers:
-                    # It's the time to re-send vip + normal servers
-                    # GoldSrc will cache first received servers and will keep it's position
-                    if client_delay_show_normal_servers[ip] < new_current_time:
-                        socky.sendto(masterserver_message + masterserver_message_vip, client)
+            # Delay Showing VIP + Normal Servers
+            if ip in client_delay_show_normal_servers:
+                # It's the time to re-send vip + normal servers
+                # GoldSrc will cache first received servers and will keep it's position
+                if client_delay_show_normal_servers[ip] < new_current_time:
+                    socky.sendto(masterserver_message + masterserver_message_vip, client)
+                    del client_delay_show_normal_servers[ip]
+                    print(f"{Fore.RED}[*]{Fore.GREEN} Sent MasterServers Data To Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Header Start + VIP Servers + Normal Servers]")
+                    continue # Ignore Incomming Packets
+
+            # Pending MasterServer. Ignore
+            if ip in clients_delay_response:
+                # User closed the connexion or stopped sending packets
+                if clients_delay_response[ip] < new_current_time:
+                    del clients_delay_response[ip]
+
+                    # Reset Vars
+                    if ip in client_delay_show_normal_servers:
                         del client_delay_show_normal_servers[ip]
-                        print(f"{Fore.RED}[*]{Fore.GREEN} Sent MasterServers Data To Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Header Start + VIP Servers + Normal Servers]")
-                        continue # Ignore Incomming Packets
-
-                # Pending MasterServer. Ignore
-                if ip in clients_delay_response:
-                    # User closed the connexion or stopped sending packets
-                    if clients_delay_response[ip] < new_current_time:
-                        del clients_delay_response[ip]
-
-                        # Reset Vars
-                        if ip in client_delay_show_normal_servers:
-                            del client_delay_show_normal_servers[ip]
-                        if ip in client_delay_force_close_connexion:
-                            del client_delay_force_close_connexion[ip]
-                    else:
-                        # Client is still sending us packets
-                        clients_delay_response[ip] = new_current_time + hold_connexion_closed
-                        continue # Ignore Incomming Packets
-
-                # Prevent Overflow
-                if len(msg) > 64:
-                    continue # Ignore Incomming Packets
-
-                data = msg.split(b"\x00")
-                header = data[0].split(b"\xff")
-
-                if header[0] != b'\x31':
-                    print(f"{Fore.RED}[*]{Fore.GREEN} Received Invalid Header From Client {Fore.CYAN}{client[0]}.")
-                    continue # Ignore Incomming Packets
-
-                filters = data[1]
-                if b'gamedir' not in filters or b'nap' not in filters or b"cstrike" not in filters or b"10" not in filters:
-                    print(f"{Fore.RED}[*]{Fore.GREEN} Client Sent A Non MasterServer Query {Fore.CYAN}{client[0]}")
-                    continue # Ignore Incomming Packets
-                
-                if client[0] not in ips_list:
-                    socky.sendto(intern_start_header + masterserver_message_vip, client)
-                    print(f"{Fore.RED}[*]{Fore.GREEN} Sent MasterServers Data To Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Header Start + VIP Servers]")
-
-                    # Save client ip as a copy of his request. Counter-Strike will always ask for finish of the list.
-                    # So while client is flooding us, we will wait until we detect a delay from his requests.
-                    # This mean that user disconnected from our server and stopped sending MasterServer Requests Servers
-                    current_time = time.time()
-                    user_ip = client[0]
-                    clients_delay_response[user_ip] = current_time + hold_connexion_closed
-                    client_delay_show_normal_servers[user_ip] = current_time + delay_show_normal_servers
-                    client_delay_force_close_connexion[user_ip] = current_time + force_conexion_to_close
+                    if ip in client_delay_force_close_connexion:
+                        del client_delay_force_close_connexion[ip]
                 else:
-                    # Fully sending all servers to whitelisted ips
-                    socky.sendto(masterserver_message + masterserver_message_vip + intern_end_header, client)
-                    print(f"{Fore.RED}[*]{Fore.GREEN} Sent MasterServers Data To Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Header Start + Data + Header End] [WhiteList IP]")
+                    # Client is still sending us packets
+                    clients_delay_response[ip] = new_current_time + hold_connexion_closed
+                    continue # Ignore Incomming Packets
 
-            except socket.error:
-                continue # Ignore Sockets errors
+            # Prevent Overflow
+            if len(msg) > 64:
+                continue # Ignore Incomming Packets
 
-if __name__ == "__main__":
+            data = msg.split(b"\x00")
+            header = data[0].split(b"\xff")
+
+            if header[0] != b'\x31':
+                print(f"{Fore.RED}[*]{Fore.GREEN} Received Invalid Header From Client {Fore.CYAN}{client[0]}.")
+                continue # Ignore Incomming Packets
+
+            filters = data[1]
+            if b'gamedir' not in filters or b'nap' not in filters or b"cstrike" not in filters or b"10" not in filters:
+                print(f"{Fore.RED}[*]{Fore.GREEN} Client Sent A Non MasterServer Query {Fore.CYAN}{client[0]}")
+                continue # Ignore Incomming Packets
+            
+            if client[0] not in ips_list:
+                socky.sendto(intern_start_header + masterserver_message_vip, client)
+                print(f"{Fore.RED}[*]{Fore.GREEN} Sent MasterServers Data To Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Header Start + VIP Servers]")
+
+                # Save client ip as a copy of his request. Counter-Strike will always ask for finish of the list.
+                # So while client is flooding us, we will wait until we detect a delay from his requests.
+                # This mean that user disconnected from our server and stopped sending MasterServer Requests Servers
+                current_time = time.time()
+                user_ip = client[0]
+                clients_delay_response[user_ip] = current_time + hold_connexion_closed
+                client_delay_show_normal_servers[user_ip] = current_time + delay_show_normal_servers
+                client_delay_force_close_connexion[user_ip] = current_time + force_conexion_to_close
+            else:
+                # Fully sending all servers to whitelisted ips
+                socky.sendto(masterserver_message + masterserver_message_vip + intern_end_header, client)
+                print(f"{Fore.RED}[*]{Fore.GREEN} Sent MasterServers Data To Client {Fore.CYAN}{client[0]}{Fore.GREEN} [Header Start + Data + Header End] [WhiteList IP]")
+
+        except socket.error:
+            continue # Ignore Sockets errors
+
+
+def handle_incomming_commands(cmd):
+    match cmd:
+        case "help":
+            print(f"\n{Fore.GREEN}Available Commands")
+            print(f"{Fore.GREEN}reload ->{Fore.CYAN} attempt to reload all servers from currents files.\n")
+            pass
+        case "reload":
+            load_list_and_prepare_data()
+
+def main():
+    threading.Thread(target=start_main_server, daemon=True).start()
+
+    reload = int(config.get("Automations", "reload_interval"))
+
+    def f_reload_interval_for_master_list():
+        while True:
+            time.sleep(reload)
+            load_list_and_prepare_data()
+
+    thread = threading.Thread(target=f_reload_interval_for_master_list, daemon=True)
+    thread.start()
+
     print(f"{Fore.GREEN}--------------------------------------")
     print(f"{Fore.RED}--------------MXP-MASTER--------------")
-    print(f"{Fore.GREEN}--------------------------------------")
+    print(f"{Fore.GREEN}--------------------------------------\n")
 
+    # Do some delay before activating input listener from client
+    time.sleep(1)
+    
+    while True:
+        cmd = input(f"{Fore.GREEN}Enter a command:{Style.RESET_ALL} ")
+        handle_incomming_commands(cmd)
+
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:

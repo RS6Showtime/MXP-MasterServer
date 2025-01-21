@@ -1,1 +1,1 @@
-vip servers, always on top
+192.168.0.1:27015
