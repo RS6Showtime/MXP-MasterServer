@@ -85,6 +85,7 @@ def load_list_and_prepare_data():
     print(f"{Fore.RED}[*]{Fore.GREEN} MasterServer Loaded{Fore.CYAN} {str(len(vip_servers))}{Fore.GREEN} VIP Servers")
     print(f"{Fore.RED}[*]{Fore.GREEN} MasterServer Loaded{Fore.CYAN} {str(len(normal_servers))}{Fore.GREEN} Normal Servers")
 
+
 def start_main_server():
     global global_socket
 
@@ -199,13 +200,13 @@ def start_main_server():
 
 
 def handle_incomming_commands(cmd):
-    match cmd:
-        case "help":
-            print(f"\n{Fore.GREEN}Available Commands")
-            print(f"{Fore.GREEN}reload ->{Fore.CYAN} attempt to reload all servers from currents files.\n")
-            pass
-        case "reload":
-            load_list_and_prepare_data()
+    if cmd == "help":
+        print(f"\n{Fore.GREEN}Available Commands")
+        print(f"{Fore.GREEN}reload ->{Fore.CYAN} attempt to reload all servers from currents files.\n")
+        pass
+    elif cmd == "reload":
+        load_list_and_prepare_data()
+
 
 def main():
     threading.Thread(target=start_main_server, daemon=True).start()
@@ -230,6 +231,7 @@ def main():
     while True:
         cmd = input(f"{Fore.GREEN}Enter a command:{Style.RESET_ALL} ")
         handle_incomming_commands(cmd)
+
 
 if __name__ == "__main__":
     try:

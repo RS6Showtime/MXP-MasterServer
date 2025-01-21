@@ -80,6 +80,7 @@ def load_list_and_prepare_data():
     print(f"{Fore.RED}[*]{Fore.GREEN} MasterServer Loaded{Fore.CYAN} {str(len(vip_servers))}{Fore.GREEN} VIP Servers")
     print(f"{Fore.RED}[*]{Fore.GREEN} MasterServer Loaded{Fore.CYAN} {str(len(normal_servers))}{Fore.GREEN} Normal Servers")
 
+
 def start_main_server():
     global global_socket
     socky = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -110,6 +111,7 @@ def start_main_server():
             filters = data[1]
             if b'gamedir' not in filters or b'nap' not in filters or b"cstrike" not in filters or b"10" not in filters:
                 print(f"{Fore.RED}[*]{Fore.GREEN} Client Sent A Non MasterServer Query {Fore.CYAN}{client[0]}")
+                continue
 
             socky.sendto(masterserver_message, client)
             print(f"{Fore.RED}[*]{Fore.GREEN} Sent MasterServers Data To Client {Fore.CYAN}{client[0]}")
@@ -117,14 +119,15 @@ def start_main_server():
         except socket.error:
             continue
 
+
 def handle_incomming_commands(cmd):
-    match cmd:
-        case "help":
-            print(f"\n{Fore.GREEN}Available Commands")
-            print(f"{Fore.GREEN}reload ->{Fore.CYAN} attempt to reload all servers from currents files.\n")
-            pass
-        case "reload":
-            load_list_and_prepare_data()
+    if cmd == "help":
+        print(f"\n{Fore.GREEN}Available Commands")
+        print(f"{Fore.GREEN}reload ->{Fore.CYAN} attempt to reload all servers from currents files.\n")
+        pass
+    elif cmd == "reload":
+        load_list_and_prepare_data()
+
 
 def main():
     threading.Thread(target=start_main_server, daemon=True).start()
@@ -147,6 +150,7 @@ def main():
     while True:
         cmd = input(f"{Fore.GREEN}Enter a command:{Style.RESET_ALL} ")
         handle_incomming_commands(cmd)
+
 
 if __name__ == "__main__":
     try:
